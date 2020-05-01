@@ -13,7 +13,7 @@ clear variables, close all
 % img = imread(strcat(path, name{1}));
 img = imread('MATERIAL/database/Moedas4.jpg');
 
-%% Process image
+%% Process image 
 img_gauss = imgaussfilt(img, 3);
 binary = imbinarize(img_gauss(:,:,1), 0.5);
 se = strel('disk', 2);
