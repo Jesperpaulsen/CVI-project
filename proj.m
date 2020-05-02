@@ -50,6 +50,21 @@ for i = 1:length(objectCount)
     end
 end
 
+%% Sharpness of the objects
+boundaries = bwboundaries(processedImg, 'holes');
+sharpness = [];
+
+for i = 1:num
+    deltaSq = diff(boundaries{i}).^2;
+    perimeter = sum(sqrt(sum(deltaSq, 2)));
+    area = stats(i).Area;
+    objectSharpness = 1 - 4*pi*area/perimeter^2;
+    sharpness = [sharpness objectSharpness];
+end
+
+C = num2cell(sharpness)
+[stats.Sharpness] = C{:}
+
 %% Table from stats
 statsTable = struct2table(stats);
 statsTable.ObjectNumber = zeros(objectCount, 1);
@@ -58,16 +73,16 @@ statsTable.ObjectNumber(:) = 1:objectCount;
 % Table as figure
 colnames= {'Area', 'Centroid x', 'Centroid y', 'BoundingBox x', ...
     'BoundingBox y', 'BoundingBox width', 'BoundingBox height', ...
-    'Perimeter', 'Circularity', 'Object'};
+    'Perimeter', 'Circularity', 'Sharpness', 'Object'};
 t = uitable('Data', statsTable{:,:}, 'ColumnName', colnames, 'RowName', ...
     statsTable.Properties.RowNames, 'Units', 'Normalized', 'Position', ...
     [0, 0, 1, 1]);
 
+%% Visualize centroid and draw object number on figure, also calculate distance
+distance = NaN(objectCount, objectCount);
+
 figure;
 imshow(label2rgb(lb));
-
-% Visualize centroid and draw object number on figure, also calculate distance
-distance = NaN(objectCount, objectCount);
 
 hold on;
 for i = 1:num
@@ -86,25 +101,59 @@ for i = 1:num
 end
 hold off;
 
-% Visualize perimeter of objects
+%% Visualize perimeter of objects
 figure; 
 imshow(img);
 title('Perimeters');
 
 hold on;
 boundaries = bwboundaries(processedImg);
-for k = 1:size(boundaries, 1)
-	thisBoundary = boundaries{k};
+for i = 1:size(boundaries, 1)
+	thisBoundary = boundaries{i};
 	plot(thisBoundary(:,2), thisBoundary(:,1), 'r', 'LineWidth', 2);
 end
 hold off;
 
-% Draw individual objects and order them
-orderBy = questdlg('Order individual objects by:', 'Ordering',...
-    'Perimeter', 'Area', 'Circularity', 'Exit');
+%% Draw individual objects and order them
+%orderBy = questdlg('Order individual objects by:', 'Ordering',...
+%    'Perimeter', 'Area', 'Circularity', 'Exit');
+choice = menu('Order individual objects by:',...
+    'Perimeter', 'Area', 'Circularity', 'Sharpness');
+choices = ["Perimeter", "Area", "Circularity", "Sharpness"];
+orderBy = char(choices(choice));
 
 drawIndividualObjectsByOrdering(img, statsTable, stats, orderBy,...
     objectCount);
+
+%% Relative distance
+figure; 
+imshow(img);
+title('Select an object to see distance to other objects');
+hold on;
+[x,y] = ginput(1);
+for i = 1:objectCount
+    if (x > stats(i).BoundingBox(1)) &&...
+            (x < (stats(i).BoundingBox(1) + stats(i).BoundingBox(3)))
+        if (y > stats(i).BoundingBox(2)) &&...
+                (y < (stats(i).BoundingBox(2) + stats(i).BoundingBox(4)))
+           for j = 1:objectCount
+               if i < j
+                    txt = ['d = ' num2str(distance(j, i))];
+               else
+                    txt = ['d = ' num2str(distance(i, j))];  
+               end
+               text(stats(j).Centroid(1)-40,stats(j).Centroid(2)-20,...
+                   txt, 'Color', 'white', 'BackgroundColor', 'black');
+               plot([stats(i).Centroid(1) stats(j).Centroid(1)],...
+                   [stats(i).Centroid(2) stats(j).Centroid(2)], '-');
+            end
+        end
+    end
+end
+hold off;
+
+
+%-------------------------------------------------------------------------%
 
 
 function drawIndividualObjectsByOrdering(img, table, stats,...
