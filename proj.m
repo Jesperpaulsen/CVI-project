@@ -14,28 +14,25 @@ clear variables, close all
 img = imread('MATERIAL/database/Moedas4.jpg');
 
 %% Process image 
-img_gauss = imgaussfilt(img, 3);
-binary = imbinarize(img_gauss(:,:,1), 0.5);
+imgGauss = imgaussfilt(img, 3);
+imgBinary = imbinarize(imgGauss(:,:,1), 0.5);
 se = strel('disk', 2);
-imgTemp = imdilate(binary, se);
+imgDilated = imdilate(imgBinary, se);
 
 % Collisions
-D = -bwdist(~imgTemp);
+D = -bwdist(~imgDilated);
 WS = watershed(D);
-mask = imextendedmin(D,3);
+mask = imextendedmin(D, 3);
 D2 = imimposemin(D, mask);
 WS2 = watershed(D2);
-processedImg = imgTemp;
+processedImg = imgDilated;
 processedImg(WS2 == 0) = 0;
 
 %% Detect image objects
-[lb, num] = bwlabel(processedImg);
+[lbl, objectCount] = bwlabel(processedImg);
 
 %% Get stats from image
-stats = regionprops(lb, 'Centroid', 'Perimeter', 'Area', 'BoundingBox');
-
-% Number of objects
-objectCount = size(stats,1);
+stats = regionprops(lbl, 'Centroid', 'Perimeter', 'Area', 'BoundingBox');
 
 %% Count coins
 circularity = ([stats.Perimeter] .^ 2) ./ (4 * pi .* [stats.Area]);
@@ -54,7 +51,7 @@ end
 boundaries = bwboundaries(processedImg, 'holes');
 sharpness = [];
 
-for i = 1:num
+for i = 1:objectCount
     deltaSq = diff(boundaries{i}).^2;
     perimeter = sum(sqrt(sum(deltaSq, 2)));
     area = stats(i).Area;
@@ -62,8 +59,8 @@ for i = 1:num
     sharpness = [sharpness objectSharpness];
 end
 
-C = num2cell(sharpness)
-[stats.Sharpness] = C{:}
+C = num2cell(sharpness);
+[stats.Sharpness] = C{:};
 
 %% Table from stats
 statsTable = struct2table(stats);
@@ -82,10 +79,10 @@ t = uitable('Data', statsTable{:,:}, 'ColumnName', colnames, 'RowName', ...
 distance = NaN(objectCount, objectCount);
 
 figure;
-imshow(label2rgb(lb));
+imshow(label2rgb(lbl));
 
 hold on;
-for i = 1:num
+for i = 1:objectCount
     % Draw point and object number
     plot(stats(i).Centroid(1), stats(i).Centroid(2), 'k.', 'markersize', 20);
     text(stats(i).Centroid(1), stats(i).Centroid(2)-20, int2str(i));
@@ -93,13 +90,15 @@ for i = 1:num
     % Calculate relative distance
     distance(1, i) = i;
     distance(i, i) = 0;
-    for j = i+1:num
+    for j = i+1:objectCount
         X = [stats(i).Centroid(1),stats(i).Centroid(2); stats(j).Centroid(1),stats(j).Centroid(2)];
         distance(j, i) = pdist(X, 'euclidean');
     end
     drawnow;
 end
 hold off;
+
+questdlg('Move on?', '', 'OK', 'Exit');
 
 %% Visualize perimeter of objects
 figure; 
@@ -114,16 +113,7 @@ for i = 1:size(boundaries, 1)
 end
 hold off;
 
-%% Draw individual objects and order them
-%orderBy = questdlg('Order individual objects by:', 'Ordering',...
-%    'Perimeter', 'Area', 'Circularity', 'Exit');
-choice = menu('Order individual objects by:',...
-    'Perimeter', 'Area', 'Circularity', 'Sharpness');
-choices = ["Perimeter", "Area", "Circularity", "Sharpness"];
-orderBy = char(choices(choice));
-
-drawIndividualObjectsByOrdering(img, statsTable, stats, orderBy,...
-    objectCount);
+questdlg('Move on?', '', 'OK', 'Exit');
 
 %% Relative distance
 figure; 
@@ -152,23 +142,36 @@ for i = 1:objectCount
 end
 hold off;
 
+questdlg('Move on?', '', 'OK', 'Exit');
+
+%% Draw individual objects and order them
+%orderBy = questdlg('Order individual objects by:', 'Ordering',...
+%    'Perimeter', 'Area', 'Circularity', 'Exit');
+choice = menu('Order individual objects by:',...
+    'Perimeter', 'Area', 'Circularity', 'Sharpness');
+choices = ["Perimeter", "Area", "Circularity", "Sharpness"];
+orderBy = char(choices(choice));
+
+drawIndividualObjectsByOrdering(img, statsTable, stats, orderBy,...
+    objectCount);
+
 
 %-------------------------------------------------------------------------%
-
+% N2S: Either put all parts into functions, or none
 
 function drawIndividualObjectsByOrdering(img, table, stats,...
     orderBy, objectCount)
     orderedTable = sortrows(table, orderBy);
     figure;
-    for k = 1:objectCount
-        objIndex = orderedTable.ObjectNumber(k);
+    for i = 1:objectCount
+        objIndex = orderedTable.ObjectNumber(i);
         property = getfield(stats, {objIndex}, orderBy);
-        bbox = stats(objIndex).BoundingBox;
-        subImage = imcrop(img, bbox);
-        subplot(3,4,k);
-        imshow(subImage);
+        bBox = stats(objIndex).BoundingBox;
+        subImg = imcrop(img, bBox);
+        subplot(3,4,i);
+        imshow(subImg);
         title([orderBy ' = ' num2str(property)]);
-        text(bbox(3)/2-25, bbox(4)+15, ['Object #' num2str(objIndex)]);
+        text(bBox(3)/2-25, bBox(4)+15, ['Object #' num2str(objIndex)]);
     end
 end
 
