@@ -19,6 +19,8 @@ binary = imbinarize(img_gauss(:,:,1), 0.5);
 se = strel('disk', 2);
 imgTemp = imdilate(binary, se);
 
+imshow(imgTemp);
+
 % Collisions
 D = -bwdist(~imgTemp);
 WS = watershed(D);
@@ -28,6 +30,7 @@ WS2 = watershed(D2);
 processedImg = imgTemp;
 processedImg(WS2 == 0) = 0;
 
+imshow(processedImg);
 %% Detect image objects
 [lb, num] = bwlabel(processedImg);
 
@@ -36,6 +39,7 @@ stats = regionprops(lb, 'Centroid', 'Perimeter', 'Area', 'BoundingBox');
 
 % Number of objects
 objectCount = size(stats,1);
+disp(objectCount);
 
 %% Count coins
 circularity = ([stats.Perimeter] .^ 2) ./ (4 * pi .* [stats.Area]);
@@ -49,6 +53,7 @@ for i = 1:length(objectCount)
         count = count + 1;
     end
 end
+disp(count);
 
 %% Sharpness of the objects
 boundaries = bwboundaries(processedImg, 'holes');
