@@ -5,8 +5,7 @@ close all; clear all;
 
 %% The files to read
 filePaths = ["MATERIAL\database\Moedas1.jpg", "MATERIAL\database\Moedas2.jpg", "MATERIAL\database\Moedas3.jpg", "MATERIAL\database\Moedas4.jpg"];
-RBGImage = imread(filePaths(1));
-
+RBGImage = imread(filePaths(3));
 %% Image processing to prepare the picture for object recognition
 
 % Applying the gaussian filter to make the object detection easier.
@@ -74,36 +73,42 @@ imshow(RBGImage);
 % information about the objects found in the labelMatrix.
 [labelMatrix, noOfObjects] = bwlabel(BWImage);
 stats = regionprops('table', labelMatrix, 'Area', 'Centroid', 'Perimeter', 'BoundingBox', 'EulerNumber');
-stats.value = zeros(noOfObjects, 1);
+stats.Value = zeros(noOfObjects, 1);
 
 % Info we have about the coins:
 
 Values = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0];
-% TODO!!!! Measure these values ourself.  (KOK!!!)
-Diameters = [120.7976, 139.7443, 154.2051, 144.9026, 160.98, 176.6122, 169.2232];
-Perimeters = [376.444, 436.188, 481.716, 452.1, 503.326, 552.426, 528.724];
+CoinRadii = [58.36326667, 67.6397, 75.3049, 70.495, 79.40548, 86.05955, 82.97574];
 
+disp(stats);
+hold on;
 for i=1:noOfObjects
+    bbox = table2array(stats(i, 'BoundingBox'));
+    rectangle('Position', bbox);
     % As the euro currencty doesn't have any coins with holes, we only
     % want to check objects without holes
     if (stats.EulerNumber(i) == 1)
-        croppedImage = imcrop(BWImage, table2array(stats(i, 'BoundingBox')) + 50);
+        croppedImage = imcrop(BWImage,  table2array(stats(i, 'BoundingBox')));
         [centers, radii, metrics] = findCoins(croppedImage);
         if (isempty(centers) == 0)
             % TODO: It might be a bit overkill to check the objects for more than
             % 1 coin here, so at the moment we havent implemented a way to
             % find more than 1 coin inside an object. We will have to check
             % if its necessary with more logic here
-            diameter = radii * 2;
-            disp(diameter);
-            for j=1:length(Diameters)
-                if (diameter < (Diameters(j) + 10) & diameter > (Diameters(j) - 10))
+            center = [bbox(1) + centers(1) bbox(2) + centers(2)];
+            stats.Centroid(i, :) = center(:);
+            viscircles(center, radii, 'Color', 'b');
+            for j=1:length(CoinRadii)
+                if (radii < (CoinRadii(j) + 2) & radii > (CoinRadii(j) - 2))
                    stats.Value(i) = Values(j);
+                   text(center(1), center(2), num2str(Values(j)));
                    break
                 end    
             end
         end
     end
+    boxCenter = table2array(stats(i, 'Centroid'));
+    plot(boxCenter(1), boxCenter(2), 'r+');
 end
 
 disp(stats);
@@ -114,6 +119,7 @@ disp(stats);
 function [centers, radii, metrics] = findCoins(croppedImage)
     startRadius = 50;
     endRadius = 160;
-    sensitivity = 0.92;
+    sensitivity = 0.93;
+    imshow(croppedImage);
     [centers, radii, metrics] = imfindcircles(croppedImage, [startRadius, endRadius], 'Sensitivity', sensitivity);
 end
