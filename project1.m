@@ -5,7 +5,7 @@ close all; clear all;
 
 %% The files to read
 filePaths = ["MATERIAL\database\Moedas1.jpg", "MATERIAL\database\Moedas2.jpg", "MATERIAL\database\Moedas3.jpg", "MATERIAL\database\Moedas4.jpg"];
-RBGImage = imread(filePaths(3));
+RBGImage = imread(filePaths(2));
 %% Image processing to prepare the picture for object recognition
 
 % Applying the gaussian filter to make the object detection easier.
@@ -69,28 +69,31 @@ imshow(RBGImage);
 
 %% Detecting objects
 % By the use of bwlabel which returns [labelMatrix = label matrix for objects found] 
-% and [noOfObjects = number of objects in the picture], we can use regionprops to get
+% and [noOfObjects = number of objects in the matrix], we can use regionprops to get
 % information about the objects found in the labelMatrix.
 [labelMatrix, noOfObjects] = bwlabel(BWImage);
 stats = regionprops('table', labelMatrix, 'Area', 'Centroid', 'Perimeter', 'BoundingBox', 'EulerNumber');
 stats.Value = zeros(noOfObjects, 1);
+
+stats.Circularity = ([stats.Perimeter] .^ 2) ./ (4 * pi .* [stats.Area]);
 
 % Info we have about the coins:
 
 Values = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0];
 CoinRadii = [58.36326667, 67.6397, 75.3049, 70.495, 79.40548, 86.05955, 82.97574];
 
-disp(stats);
 hold on;
 for i=1:noOfObjects
     bbox = table2array(stats(i, 'BoundingBox'));
     rectangle('Position', bbox);
-    % As the euro currencty doesn't have any coins with holes, we only
-    % want to check objects without holes
-    if (stats.EulerNumber(i) == 1)
-        croppedImage = imcrop(BWImage,  table2array(stats(i, 'BoundingBox')));
-        [centers, radii, metrics] = findCoins(croppedImage);
-        if (isempty(centers) == 0)
+    croppedImage = imcrop(BWImage,  table2array(stats(i, 'BoundingBox')));
+    [centers, radii, metrics] = findCoins(croppedImage);
+    if (isempty(centers) == 0)
+        % stats.Circularity(i) = metrics(1);
+        stats.Radii(i) = radii(1);
+        % As the euro currencty doesn't have any coins with holes, we only
+        % want to check objects without holes
+        if (stats.EulerNumber(i) == 1)
             % TODO: It might be a bit overkill to check the objects for more than
             % 1 coin here, so at the moment we havent implemented a way to
             % find more than 1 coin inside an object. We will have to check
@@ -110,9 +113,11 @@ for i=1:noOfObjects
     boxCenter = table2array(stats(i, 'Centroid'));
     plot(boxCenter(1), boxCenter(2), 'r+');
 end
-
+plotBoundaries(BWImage);
 disp(stats);
 %% Finding coins
+% TODO: Determine if we can use circularity to detect coins or if we should
+% continue to use Circular Hough Transform.
 % As coins are the only objecttype we know, and the other objects can be of
 % any type, partially visible and becuase they can overlap, we use
 % the Circular Hough Transform to look for coins
@@ -123,3 +128,17 @@ function [centers, radii, metrics] = findCoins(croppedImage)
     imshow(croppedImage);
     [centers, radii, metrics] = imfindcircles(croppedImage, [startRadius, endRadius], 'Sensitivity', sensitivity);
 end
+
+%% Finding boundaries
+% Detects and draws boundaries
+function boundaries = plotBoundaries(BWImage)
+    hold on;
+    boundaries = bwboundaries(BWImage);
+    for i = 1:size(boundaries, 1)
+        thisBoundary = boundaries{i};
+        plot(thisBoundary(:,2), thisBoundary(:,1), 'r', 'LineWidth', 2);
+    end
+    hold off;
+end
+
+
