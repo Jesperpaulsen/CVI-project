@@ -28,17 +28,28 @@ classdef app_exported < matlab.apps.AppBase
         UIAxes7                        matlab.ui.control.UIAxes
         UIAxes8                        matlab.ui.control.UIAxes
         TransformationTab              matlab.ui.container.Tab
-        UIAxes2_9                      matlab.ui.control.UIAxes
-        UIAxes2_10                     matlab.ui.control.UIAxes
-        UIAxes2_11                     matlab.ui.control.UIAxes
-        UIAxes2_12                     matlab.ui.control.UIAxes
-        UIAxes2_13                     matlab.ui.control.UIAxes
-        UIAxes2_14                     matlab.ui.control.UIAxes
-        UIAxes2_15                     matlab.ui.control.UIAxes
-        UIAxes2_16                     matlab.ui.control.UIAxes
+        UIAxes9                        matlab.ui.control.UIAxes
+        RotateSliderLabel              matlab.ui.control.Label
+        RotateSlider                   matlab.ui.control.Slider
+        ScaleXSliderLabel              matlab.ui.control.Label
+        ScaleXSlider                   matlab.ui.control.Slider
+        ScaleYSliderLabel              matlab.ui.control.Label
+        ScaleYSlider                   matlab.ui.control.Slider
+        ShearXSliderLabel              matlab.ui.control.Label
+        ShearXSlider                   matlab.ui.control.Slider
+        ShearYSliderLabel              matlab.ui.control.Label
+        ShearYSlider                   matlab.ui.control.Slider
+        TiltESliderLabel               matlab.ui.control.Label
+        TiltESlider                    matlab.ui.control.Slider
+        SelectanobjecttotransformitLabel  matlab.ui.control.Label
+        ApplyButton                    matlab.ui.control.Button
+        ResetButton                    matlab.ui.control.Button
+        TiltFSliderLabel               matlab.ui.control.Label
+        TiltFSlider                    matlab.ui.control.Slider
         Table                          matlab.ui.container.Tab
         UITable                        matlab.ui.control.Table
         ShowdistanceCheckBox           matlab.ui.control.CheckBox
+        TotalvalueinpictureLabel       matlab.ui.control.Label
     end
 
     properties (Access = public)
@@ -51,9 +62,13 @@ classdef app_exported < matlab.apps.AppBase
         coinPlot % Holds the coin plot
         distancePlot % Holds the distance plots
         distanceText % Holds the distance text
+        objectPlot % Holds the box plot around the selected object
         selectedObjectID % Holds ID to the last selected object
         sortedImageAxis % Axis to display sorted images
-        objectPlot % Holds the box plot around the selected object
+        sortedImages % Holds the image displayed at the axis
+        transformedImage % Holds the transformed image
+        originalImage % Holds the untransformed image
+        transformedImagePlot % Holds the transformed iamge plot
     end    
     methods (Access = private)
         function initalizeImageAnalyzer(app, pathToImage)
@@ -66,6 +81,9 @@ classdef app_exported < matlab.apps.AppBase
             app.imPlot = imagesc(app.UIAxes, app.im, 'Tag', 'objectsImage');
             app.drawObejctID();
             app.loadTableData();
+            app.OrderobjectsbyDropDown.Value = "Area";
+            app.updateSortedImages("Area");
+            app.UIAxes9.Visible = false;
         end
         
         function deleteImPlot(app)
@@ -78,6 +96,16 @@ classdef app_exported < matlab.apps.AppBase
             app.ShowdetectedcoinsCheckBox.Value = 0;
             delete(app.objectPlot);
             delete(app.imPlot);
+            app.selectedObjectID = -1;
+            app.DetailsTextArea.Value = "Object not chosen";
+            app.IA = app.IA.updateDistanceToSelectedObject(-1);
+            app.ShowdistanceCheckBox.Visible = 0;
+            app.drawDistanceIndicators(0); 
+            app.UIAxes9.Visible = false;
+            delete(app.transformedImagePlot);
+            app.resetTransformation();
+            app.ApplyButton.Visible = false;
+            app.ResetButton.Visible = false;
         end
         
         function drawArea(app, value)
@@ -212,7 +240,7 @@ classdef app_exported < matlab.apps.AppBase
                             delete(app.distancePlot(i));
                             delete(app.distanceText(i));
                         catch ME
-                            disp('Unable to delete distance text/plot');
+                           %  disp('Unable to delete distance text/plot');
                         end
                     end
                 end
@@ -223,13 +251,21 @@ classdef app_exported < matlab.apps.AppBase
                         delete(app.distancePlot(i));
                         delete(app.distanceText(i));
                     catch ME
-                        disp('Unable to delete distance text/plot');
+                        % disp('Unable to delete distance text/plot');
                     end
                 end
             end
         end
+        function drawTransformedImage(app)
+            try 
+                delete(app.transformedImagePlot);
+            catch ME
+                disp('Unable to delete transformed image');
+            end
+            app.transformedImagePlot = imagesc(app.UIAxes9, app.transformedImage);
+        end
         function handleFigureClick(app)
-            [area, centroid, bbox, perimeter, value, circularity, radii, sharpness, objectID] = app.IA.getSelectedObject(app.UIAxes.CurrentPoint);
+            [area, centroid, bbox, image, perimeter, value, circularity, radii, sharpness, objectID] = app.IA.getSelectedObject(app.UIAxes.CurrentPoint);
             app.selectedObjectID = objectID;
             if (area > 0)
                 try
@@ -243,6 +279,24 @@ classdef app_exported < matlab.apps.AppBase
                    app.drawDistanceIndicators(0);
                    app.drawDistanceIndicators(1); 
                 end
+                app.updateSortedImages(app.OrderobjectsbyDropDown.Value);
+                app.UIAxes9.Color = 'black';
+                app.UIAxes9.Visible = true;
+                try 
+                    delete(app.transformedImagePlot);
+                catch ME
+                    disp('Unable to delete transformed image');
+                end
+                % We save both images here, because we want to be able to
+                % use the original image over and over when applying the
+                % transformations, instead of applying the transformations
+                % on the already transformed image
+                app.originalImage = image;
+                app.transformedImage = image;
+                app.transformedImagePlot = imagesc(app.UIAxes9, app.transformedImage);
+                app.ApplyButton.Visible = true;
+                app.ResetButton.Visible = true;
+                app.resetTransformation();
                 string =  "Area: " + num2str(area) +...
                     newline + "Perimeter: " + num2str(perimeter) +...
                     newline + "Center: (" + num2str(round(centroid(1))) + ", " + num2str(round(centroid(2))) + ")" + ...
@@ -281,7 +335,12 @@ classdef app_exported < matlab.apps.AppBase
                 app.DetailsTextArea.Value = "Object not chosen";
                 app.IA = app.IA.updateDistanceToSelectedObject(-1);
                 app.ShowdistanceCheckBox.Visible = 0;
-                app.drawDistanceIndicators(0);  
+                app.drawDistanceIndicators(0);
+                app.UIAxes9.Visible = false;
+                delete(app.transformedImagePlot);
+                app.resetTransformation();
+                app.ApplyButton.Visible = false;
+                app.ResetButton.Visible = false;
             end
         end
         function loadTableData(app)
@@ -291,22 +350,57 @@ classdef app_exported < matlab.apps.AppBase
                app.IA.stats.Radii);
         end
         function updateSortedImages(app, value)
+            statsValue = "";
             switch value
                 case "Area"
-                    app.IA = app.IA.sortStats("Area");
+                    statsValue = "Area";
+                    app.IA = app.IA.sortStats(statsValue, "descend");
                 case "Perimeter"
-                    app.IA = app.IA.sortStats("Perimeter");
+                    statsValue = "Perimeter";
+                    app.IA = app.IA.sortStats(statsValue, "descend");
                 case "Sharpness"
-                    app.IA = app.IA.sortStats("Sharpness");
+                    statsValue = "Sharpness";
+                    app.IA = app.IA.sortStats(statsValue, "descend");
                 case "Distance from selected object"
-                    app.IA = app.IA.sortStats("Distance");
+                    statsValue = "Distance";
+                    app.IA = app.IA.sortStats(statsValue, "ascend");
                 otherwise
-                    app.IA = app.IA.sortStats("ObjectID");
+                    statsValue = "ObjectID";
+                    app.IA = app.IA.sortStats(statsValue, "ascend");
             end
-            limit = max(app.IA.noOfObjects, 8);
-            for i=1:limit
-                imagesc(app.sortedImageAxis(i), app.IA.stats.Image(i));
+            limit = min(app.IA.noOfObjects, 8);
+            for i=1:8
+                app.sortedImageAxis(i).Interactions = [];
+                app.sortedImageAxis(i).Color = 'black';
+                if (i <= limit)
+                    app.sortedImageAxis(i).Visible = true;
+                    dispValue = table2cell(app.IA.stats(i, statsValue));
+                    app.sortedImageAxis(i).Title.String = "ID " + num2str(app.IA.stats.ObjectID(i)) + ": " + num2str(dispValue{1}) + ""; 
+                    app.sortedImages(i) = imagesc(app.sortedImageAxis(i), app.IA.stats.Image{i});
+                else
+                    try
+                        delete(app.sortedImages(i));
+                    catch
+                        disp("unable to delete sorted image")
+                    end
+                    app.sortedImageAxis(i).Visible = false;
+                end
             end
+        end
+        function transformImage(app)
+            app.transformedImage = app.IA.scaleImage(app.originalImage, app.RotateSlider.Value, app.ScaleXSlider.Value, app.ScaleYSlider.Value, app.ShearXSlider.Value, app.ShearYSlider.Value, app.TiltESlider.Value, app.TiltFSlider.Value);
+            app.drawTransformedImage();
+        end
+        function resetTransformation(app)
+            app.transformedImage = app.originalImage;
+            app.drawTransformedImage();
+            app.RotateSlider.Value = 0;
+            app.ScaleXSlider.Value = 1;
+            app.ScaleYSlider.Value = 1;
+            app.ShearXSlider.Value = 0;
+            app.ShearYSlider.Value = 0;
+            app.TiltESlider.Value = 0;
+            app.TiltFSlider.Value = 0;
         end
     end
 
@@ -315,9 +409,20 @@ classdef app_exported < matlab.apps.AppBase
 
         % Code that executes after component creation
         function startupFcn(app)
-            app.initalizeImageAnalyzer(app.PredefinedImagesDropDown.Value);
             app.sortedImageAxis = [app.UIAxes1, app.UIAxes2, app.UIAxes3, app.UIAxes4, app.UIAxes5,...
                 app.UIAxes6, app.UIAxes7, app.UIAxes8];
+            app.initalizeImageAnalyzer(app.PredefinedImagesDropDown.Value);
+            app.UIAxes1.DataAspectRatioMode = 'manual';
+            app.UIAxes2.DataAspectRatioMode = 'manual';
+            app.UIAxes3.DataAspectRatioMode = 'manual';
+            app.UIAxes4.DataAspectRatioMode = 'manual';
+            app.UIAxes5.DataAspectRatioMode = 'manual';
+            app.UIAxes6.DataAspectRatioMode = 'manual';
+            app.UIAxes7.DataAspectRatioMode = 'manual';
+            app.UIAxes8.DataAspectRatioMode = 'manual';
+            app.UIAxes9.DataAspectRatioMode = 'manual';
+            app.ApplyButton.Visible = false;
+            app.ResetButton.Visible = false;
         end
 
         % Value changed function: ShowboundariesCheckBox
@@ -389,6 +494,28 @@ classdef app_exported < matlab.apps.AppBase
             value = app.OrderobjectsbyDropDown.Value;
             app.updateSortedImages(value);
         end
+
+        % Callback function
+        function ScaleXSliderValueChanged(app, event)
+            app.transformedImage = app.IA.scaleImage(app.transformedImage, app.ScaleXSlider.Value, app.ScaleYSlider.Value);
+            app.drawTransformedImage();
+        end
+
+        % Callback function
+        function ScaleYSliderValueChanged(app, event)
+            app.transformedImage = app.IA.scaleImage(app.transformedImage, app.ScaleXSlider.Value, app.ScaleYSlider.Value);
+            app.drawTransformedImage();
+        end
+
+        % Button pushed function: ApplyButton
+        function ApplyButtonPushed(app, event)
+            app.transformImage();
+        end
+
+        % Button pushed function: ResetButton
+        function ResetButtonPushed(app, event)
+            app.resetTransformation();
+        end
     end
 
     % Component initialization
@@ -421,7 +548,7 @@ classdef app_exported < matlab.apps.AppBase
             app.PredefinedImagesDropDown.ItemsData = {'MATERIAL\database\Moedas1.jpg ', 'MATERIAL\database\Moedas2.jpg ', 'MATERIAL\database\Moedas3.jpg ', 'MATERIAL\database\Moedas4.jpg'};
             app.PredefinedImagesDropDown.ValueChangedFcn = createCallbackFcn(app, @PredefinedImagesDropDownValueChanged, true);
             app.PredefinedImagesDropDown.Position = [137 490 100 22];
-            app.PredefinedImagesDropDown.Value = 'MATERIAL\database\Moedas1.jpg ';
+            app.PredefinedImagesDropDown.Value = 'MATERIAL\database\Moedas3.jpg ';
 
             % Create Label
             app.Label = uilabel(app.UIFigure);
@@ -559,61 +686,115 @@ classdef app_exported < matlab.apps.AppBase
             app.TransformationTab = uitab(app.TabGroup);
             app.TransformationTab.Title = 'Transformation';
 
-            % Create UIAxes2_9
-            app.UIAxes2_9 = uiaxes(app.TransformationTab);
-            title(app.UIAxes2_9, '')
-            xlabel(app.UIAxes2_9, '')
-            ylabel(app.UIAxes2_9, '')
-            app.UIAxes2_9.Position = [15 222 189 130];
+            % Create UIAxes9
+            app.UIAxes9 = uiaxes(app.TransformationTab);
+            title(app.UIAxes9, '')
+            xlabel(app.UIAxes9, '')
+            ylabel(app.UIAxes9, '')
+            app.UIAxes9.Position = [284 19 484 333];
 
-            % Create UIAxes2_10
-            app.UIAxes2_10 = uiaxes(app.TransformationTab);
-            title(app.UIAxes2_10, '')
-            xlabel(app.UIAxes2_10, '')
-            ylabel(app.UIAxes2_10, '')
-            app.UIAxes2_10.Position = [203 222 189 130];
+            % Create RotateSliderLabel
+            app.RotateSliderLabel = uilabel(app.TransformationTab);
+            app.RotateSliderLabel.HorizontalAlignment = 'right';
+            app.RotateSliderLabel.Position = [25 320 41 22];
+            app.RotateSliderLabel.Text = 'Rotate';
 
-            % Create UIAxes2_11
-            app.UIAxes2_11 = uiaxes(app.TransformationTab);
-            title(app.UIAxes2_11, '')
-            xlabel(app.UIAxes2_11, '')
-            ylabel(app.UIAxes2_11, '')
-            app.UIAxes2_11.Position = [391 222 189 130];
+            % Create RotateSlider
+            app.RotateSlider = uislider(app.TransformationTab);
+            app.RotateSlider.Limits = [-10 10];
+            app.RotateSlider.MajorTicks = [];
+            app.RotateSlider.Position = [87 329 150 3];
 
-            % Create UIAxes2_12
-            app.UIAxes2_12 = uiaxes(app.TransformationTab);
-            title(app.UIAxes2_12, '')
-            xlabel(app.UIAxes2_12, '')
-            ylabel(app.UIAxes2_12, '')
-            app.UIAxes2_12.Position = [579 222 189 130];
+            % Create ScaleXSliderLabel
+            app.ScaleXSliderLabel = uilabel(app.TransformationTab);
+            app.ScaleXSliderLabel.HorizontalAlignment = 'right';
+            app.ScaleXSliderLabel.Position = [19 268 47 22];
+            app.ScaleXSliderLabel.Text = 'Scale X';
 
-            % Create UIAxes2_13
-            app.UIAxes2_13 = uiaxes(app.TransformationTab);
-            title(app.UIAxes2_13, '')
-            xlabel(app.UIAxes2_13, '')
-            ylabel(app.UIAxes2_13, '')
-            app.UIAxes2_13.Position = [15 66 189 130];
+            % Create ScaleXSlider
+            app.ScaleXSlider = uislider(app.TransformationTab);
+            app.ScaleXSlider.Limits = [0.1 2];
+            app.ScaleXSlider.MajorTicks = [];
+            app.ScaleXSlider.Position = [87 277 150 3];
+            app.ScaleXSlider.Value = 1;
 
-            % Create UIAxes2_14
-            app.UIAxes2_14 = uiaxes(app.TransformationTab);
-            title(app.UIAxes2_14, '')
-            xlabel(app.UIAxes2_14, '')
-            ylabel(app.UIAxes2_14, '')
-            app.UIAxes2_14.Position = [203 66 189 130];
+            % Create ScaleYSliderLabel
+            app.ScaleYSliderLabel = uilabel(app.TransformationTab);
+            app.ScaleYSliderLabel.HorizontalAlignment = 'right';
+            app.ScaleYSliderLabel.Position = [19 215 47 22];
+            app.ScaleYSliderLabel.Text = 'Scale Y';
 
-            % Create UIAxes2_15
-            app.UIAxes2_15 = uiaxes(app.TransformationTab);
-            title(app.UIAxes2_15, '')
-            xlabel(app.UIAxes2_15, '')
-            ylabel(app.UIAxes2_15, '')
-            app.UIAxes2_15.Position = [391 66 189 130];
+            % Create ScaleYSlider
+            app.ScaleYSlider = uislider(app.TransformationTab);
+            app.ScaleYSlider.Limits = [0.1 2];
+            app.ScaleYSlider.MajorTicks = [];
+            app.ScaleYSlider.Position = [87 224 150 3];
+            app.ScaleYSlider.Value = 1;
 
-            % Create UIAxes2_16
-            app.UIAxes2_16 = uiaxes(app.TransformationTab);
-            title(app.UIAxes2_16, '')
-            xlabel(app.UIAxes2_16, '')
-            ylabel(app.UIAxes2_16, '')
-            app.UIAxes2_16.Position = [579 66 189 130];
+            % Create ShearXSliderLabel
+            app.ShearXSliderLabel = uilabel(app.TransformationTab);
+            app.ShearXSliderLabel.HorizontalAlignment = 'right';
+            app.ShearXSliderLabel.Position = [15 164 49 22];
+            app.ShearXSliderLabel.Text = 'Shear X';
+
+            % Create ShearXSlider
+            app.ShearXSlider = uislider(app.TransformationTab);
+            app.ShearXSlider.Limits = [0 2];
+            app.ShearXSlider.MajorTicks = [];
+            app.ShearXSlider.Position = [85 173 150 3];
+
+            % Create ShearYSliderLabel
+            app.ShearYSliderLabel = uilabel(app.TransformationTab);
+            app.ShearYSliderLabel.HorizontalAlignment = 'right';
+            app.ShearYSliderLabel.Position = [19 121 49 22];
+            app.ShearYSliderLabel.Text = 'Shear Y';
+
+            % Create ShearYSlider
+            app.ShearYSlider = uislider(app.TransformationTab);
+            app.ShearYSlider.Limits = [0 2];
+            app.ShearYSlider.MajorTicks = [];
+            app.ShearYSlider.Position = [89 130 150 3];
+
+            % Create TiltESliderLabel
+            app.TiltESliderLabel = uilabel(app.TransformationTab);
+            app.TiltESliderLabel.HorizontalAlignment = 'right';
+            app.TiltESliderLabel.Position = [32 80 32 22];
+            app.TiltESliderLabel.Text = 'Tilt E';
+
+            % Create TiltESlider
+            app.TiltESlider = uislider(app.TransformationTab);
+            app.TiltESlider.Limits = [-0.01 0.01];
+            app.TiltESlider.MajorTicks = [];
+            app.TiltESlider.Position = [85 89 150 3];
+
+            % Create SelectanobjecttotransformitLabel
+            app.SelectanobjecttotransformitLabel = uilabel(app.TransformationTab);
+            app.SelectanobjecttotransformitLabel.Position = [472 363 168 22];
+            app.SelectanobjecttotransformitLabel.Text = 'Select an object to transform it';
+
+            % Create ApplyButton
+            app.ApplyButton = uibutton(app.TransformationTab, 'push');
+            app.ApplyButton.ButtonPushedFcn = createCallbackFcn(app, @ApplyButtonPushed, true);
+            app.ApplyButton.Position = [32 11 100 22];
+            app.ApplyButton.Text = 'Apply';
+
+            % Create ResetButton
+            app.ResetButton = uibutton(app.TransformationTab, 'push');
+            app.ResetButton.ButtonPushedFcn = createCallbackFcn(app, @ResetButtonPushed, true);
+            app.ResetButton.Position = [143 11 100 22];
+            app.ResetButton.Text = 'Reset';
+
+            % Create TiltFSliderLabel
+            app.TiltFSliderLabel = uilabel(app.TransformationTab);
+            app.TiltFSliderLabel.HorizontalAlignment = 'right';
+            app.TiltFSliderLabel.Position = [32 46 32 22];
+            app.TiltFSliderLabel.Text = 'Tilt F';
+
+            % Create TiltFSlider
+            app.TiltFSlider = uislider(app.TransformationTab);
+            app.TiltFSlider.Limits = [-0.01 0.01];
+            app.TiltFSlider.MajorTicks = [];
+            app.TiltFSlider.Position = [85 55 150 3];
 
             % Create Table
             app.Table = uitab(app.TabGroup);
@@ -633,6 +814,11 @@ classdef app_exported < matlab.apps.AppBase
             app.ShowdistanceCheckBox.Text = 'Show distance';
             app.ShowdistanceCheckBox.Position = [664 654 100 22];
             app.ShowdistanceCheckBox.Value = true;
+
+            % Create TotalvalueinpictureLabel
+            app.TotalvalueinpictureLabel = uilabel(app.UIFigure);
+            app.TotalvalueinpictureLabel.Position = [29 556 122 22];
+            app.TotalvalueinpictureLabel.Text = 'Total value in picture: ';
 
             % Show the figure after all components are created
             app.UIFigure.Visible = 'on';

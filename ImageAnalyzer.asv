@@ -102,19 +102,18 @@ classdef ImageAnalyzer
             this.stats.Value = zeros(n, 1);
             this.stats.Circularity = ([this.stats.Perimeter] .^ 2) ./ (4 * pi .* [this.stats.Area]);
             
-            hold on;
             for i=1:this.noOfObjects
                 bbox = table2array(this.stats(i, 'BoundingBox'));
-                rectangle('Position', bbox);
+                % Image used to look for coins
                 croppedBWImage = imcrop(this.BWImage,  table2array(this.stats(i, 'BoundingBox')));
+                % Image used to show the masked object when using the sort
+                % or transform functionality.
                 croppedRGBImage = imcrop(this.RGBImage, table2array(this.stats(i, 'BoundingBox')));
+                % Image used to calculate the sharpness of the object
                 croppedBWImageUnFiltered = imcrop(this.BWImage,  table2array(this.stats(i, 'BoundingBox')));
                 this.stats.Sharpness(i) = this.computeSharpness(croppedBWImageUnFiltered);
-                croppedRGBImage(size(croppedRGBImage,1),:,:) = [];
-                croppedRGBImage(:,size(croppedRGBImage,2), :) = [];
-                A = cell2mat(this.stats.Image(i));
-                % cell2mat(croppedRGBImage);
-                this.stats.Image(i) = bsxfun(@times, croppedRGBImage, cast(A, 'like', croppedRGBImage));
+                mask = uint8(this.stats.Image{i});
+                this.stats.Image{i} = this.maskImage(mask, croppedRGBImage);
                 this.stats.ObjectID(i) = i;
                 this.stats.Distance(i) = -1;
                 [centers, radii, metrics] = this.findCoins(croppedBWImage);
@@ -142,10 +141,9 @@ classdef ImageAnalyzer
                 plot(boxCenter(1), boxCenter(2), 'r+');
             end
             % this.plotBoundaries(this.BWImage);
-            disp(this.stats);
         end
         %% Finding coins
-        function [centers, radii, metrics] = findCoins(this, croppedBWImage)
+        function [centers, radii, metrics] = findCoins(~, croppedBWImage)
             % TODO: Determine if we can use circularity to detect coins or if we should
             % continue to use Circular Hough Transform.
             % As coins are the only objecttype we know, and the other objects can be of
@@ -158,18 +156,47 @@ classdef ImageAnalyzer
         end
         %% Compute sharpness
         % Uses the gradient to compute the sharpness of the cropped image
-        function [sharpness] = computeSharpness(this, croppedBWImageUnfiltered)
+        function [sharpness] = computeSharpness(~, croppedBWImageUnfiltered)
             [gradientX, gradientY] = gradient(croppedBWImageUnfiltered);
-            S = sqrt(gradientX.*gradientX+gradientY.*gradientY);
+            S = sqrt(gradientX .* gradientX + gradientY .* gradientY);
             sharpness = sum(sum(S))./(numel(gradientX));
-            disp(sharpness);
         end
         %% Finding boundaries
         function boundaries = getBoundaries(this)
             boundaries = bwboundaries(this.BWImage);
         end
+        %% Masks the rgb image
+        function maskedImage = maskImage(~, mask, RGBImage)
+            maskX = size(mask,1);
+            maskY = size(mask,2);
+            RGBX = size(RGBImage,1);
+            RGBY =  size(RGBImage,2);
+            % We need to make sure that the mask and the RGB image is of
+            % the same size. This is usually not the case, and especially
+            % not if the object is on the edge of the image
+            while (maskX ~= RGBX)
+                if (maskX > RGBX)
+                    mask(:, maskX) = [];
+                    maskX = maskX - 1;
+                else
+                    RGBImage(RGBX, :, :) = [];
+                    RGBX = RGBX - 1;
+                end
+            end
+            while (maskY ~= RGBY)
+                if (maskY > RGBY)
+                    mask(:, maskY) = [];
+                    maskY = maskY - 1;
+                else
+                    RGBImage(:, RGBY, :) = [];
+                    RGBY = RGBY - 1;
+                end
+            end
+            % Applies the mask to the image
+            maskedImage = bsxfun(@times, RGBImage, cast(mask, 'like', RGBImage));
+        end    
         %% Finding object from position
-        function [area, centroid, bbox, perimeter, value, circularity, radii, sharpness, objectID] = getSelectedObject(this, position)
+        function [area, centroid, bbox, image, perimeter, value, circularity, radii, sharpness, objectID] = getSelectedObject(this, position)
             x = position(1, 1);
             y = position(1, 2);
             for i=1:this.noOfObjects
@@ -178,6 +205,7 @@ classdef ImageAnalyzer
                     area = this.stats.Area(i);
                     centroid = this.stats.Centroid(i, :);
                     bbox = this.stats.BoundingBox(i, :);
+                    image = this.stats.Image{i};
                     value = this.stats.Value(i);
                     circularity = this.stats.Circularity(i, :);
                     radii = this.stats.Radii(i);
@@ -190,6 +218,7 @@ classdef ImageAnalyzer
             area = 0;
             centroid = 0;
             bbox = 0;
+            image = 0;
             value = 0;
             circularity = 0;
             radii = 0;
@@ -216,9 +245,18 @@ classdef ImageAnalyzer
             end
         end
         %% Sort the stats based on row name
-        function this = sortStats(this, value)
-            sortRows(this.stats, value);
+        function this = sortStats(this, value, direction)
+            this.stats = sortrows(this.stats, value, direction);
         end
+        %% Image transformations
+        function returnImage = scaleImage(~, image, degree, scaleX, scaleY, shearX, shearY, tilt)
+            rotateMatrix = [cos(degree) sin(degree) 0; -sin(degree) cos(degree) 0; 0 0 1];
+            scaleMatrix = [scaleX 0 0; 0 scaleY 0; 0 0 1];
+            shearMatrix = [1 shearY 0; shearX 1 0; 0 0 1];
+            firstTansformation = affine2d(scaleMatrix * rotateMatrix * shearMatrix);
+         
+        end
+        
     end
 end
 
