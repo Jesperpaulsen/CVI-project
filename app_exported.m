@@ -49,7 +49,7 @@ classdef app_exported < matlab.apps.AppBase
         Table                          matlab.ui.container.Tab
         UITable                        matlab.ui.control.Table
         ShowdistanceCheckBox           matlab.ui.control.CheckBox
-        TotalvalueinpictureLabel       matlab.ui.control.Label
+        EditField                      matlab.ui.control.EditField
     end
 
     properties (Access = public)
@@ -84,6 +84,7 @@ classdef app_exported < matlab.apps.AppBase
             app.OrderobjectsbyDropDown.Value = "Area";
             app.updateSortedImages("Area");
             app.UIAxes9.Visible = false;
+            app.EditField.Value = "Total value in the picture is: " + sum(app.IA.stats.Value);
         end
         
         function deleteImPlot(app)
@@ -98,7 +99,7 @@ classdef app_exported < matlab.apps.AppBase
             delete(app.imPlot);
             app.selectedObjectID = -1;
             app.DetailsTextArea.Value = "Object not chosen";
-            app.IA = app.IA.updateDistanceToSelectedObject(-1);
+            app.IA = app.IA.updateDistanceAndSimilarityToSelectedObject(-1);
             app.ShowdistanceCheckBox.Visible = 0;
             app.drawDistanceIndicators(0); 
             app.UIAxes9.Visible = false;
@@ -273,7 +274,7 @@ classdef app_exported < matlab.apps.AppBase
                 catch ME
                     disp("Unable to delete objectplot");
                 end
-                app.IA = app.IA.updateDistanceToSelectedObject(objectID);
+                app.IA = app.IA.updateDistanceAndSimilarityToSelectedObject(objectID);
                 app.ShowdistanceCheckBox.Visible = 1;
                 if (app.ShowdistanceCheckBox.Value == 1)
                    app.drawDistanceIndicators(0);
@@ -333,7 +334,7 @@ classdef app_exported < matlab.apps.AppBase
                 delete(app.objectPlot);
                 app.selectedObjectID = -1;
                 app.DetailsTextArea.Value = "Object not chosen";
-                app.IA = app.IA.updateDistanceToSelectedObject(-1);
+                app.IA = app.IA.updateDistanceAndSimilarityToSelectedObject(-1);
                 app.ShowdistanceCheckBox.Visible = 0;
                 app.drawDistanceIndicators(0);
                 app.UIAxes9.Visible = false;
@@ -363,6 +364,9 @@ classdef app_exported < matlab.apps.AppBase
                     app.IA = app.IA.sortStats(statsValue, "descend");
                 case "Distance from selected object"
                     statsValue = "Distance";
+                    app.IA = app.IA.sortStats(statsValue, "ascend");
+                case "Similarity to selected object"
+                    statsValue = "Similarity";
                     app.IA = app.IA.sortStats(statsValue, "ascend");
                 otherwise
                     statsValue = "ObjectID";
@@ -545,10 +549,10 @@ classdef app_exported < matlab.apps.AppBase
             % Create PredefinedImagesDropDown
             app.PredefinedImagesDropDown = uidropdown(app.UIFigure);
             app.PredefinedImagesDropDown.Items = {'Moedas 1', 'Moedas 2', 'Moedas 3', 'Moedas 4'};
-            app.PredefinedImagesDropDown.ItemsData = {'MATERIAL\database\Moedas1.jpg ', 'MATERIAL\database\Moedas2.jpg ', 'MATERIAL\database\Moedas3.jpg ', 'MATERIAL\database\Moedas4.jpg'};
+            app.PredefinedImagesDropDown.ItemsData = {'Moedas1.jpg ', 'Moedas2.jpg ', 'Moedas3.jpg ', 'Moedas4.jpg'};
             app.PredefinedImagesDropDown.ValueChangedFcn = createCallbackFcn(app, @PredefinedImagesDropDownValueChanged, true);
             app.PredefinedImagesDropDown.Position = [137 490 100 22];
-            app.PredefinedImagesDropDown.Value = 'MATERIAL\database\Moedas3.jpg ';
+            app.PredefinedImagesDropDown.Value = 'Moedas1.jpg ';
 
             % Create Label
             app.Label = uilabel(app.UIFigure);
@@ -815,10 +819,10 @@ classdef app_exported < matlab.apps.AppBase
             app.ShowdistanceCheckBox.Position = [664 654 100 22];
             app.ShowdistanceCheckBox.Value = true;
 
-            % Create TotalvalueinpictureLabel
-            app.TotalvalueinpictureLabel = uilabel(app.UIFigure);
-            app.TotalvalueinpictureLabel.Position = [29 556 122 22];
-            app.TotalvalueinpictureLabel.Text = 'Total value in picture: ';
+            % Create EditField
+            app.EditField = uieditfield(app.UIFigure, 'text');
+            app.EditField.Editable = 'off';
+            app.EditField.Position = [25 537 190 43];
 
             % Show the figure after all components are created
             app.UIFigure.Visible = 'on';

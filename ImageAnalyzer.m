@@ -19,7 +19,7 @@ classdef ImageAnalyzer
         function this = ImageAnalyzer(selectedImage)
             %IMAGEANALYZER Construct an instance of this class
             %   Detailed explanation goes here
-            this.defaultImages = ["MATERIAL\database\Moedas1.jpg", "MATERIAL\database\Moedas2.jpg", "MATERIAL\database\Moedas3.jpg", "MATERIAL\database\Moedas4.jpg"];
+            this.defaultImages = ["Moedas1.jpg", "Moedas2.jpg", "Moedas3.jpg", "Moedas4.jpg"];
             this.selectedImagePath = selectedImage;
             this.loadAndPreProcessImage();
             this.watershedImage();
@@ -113,9 +113,12 @@ classdef ImageAnalyzer
                 croppedBWImageUnFiltered = imcrop(this.BWImage,  table2array(this.stats(i, 'BoundingBox')));
                 this.stats.Sharpness(i) = this.computeSharpness(croppedBWImageUnFiltered);
                 mask = uint8(this.stats.Image{i});
-                this.stats.Image{i} = this.maskImage(mask, croppedRGBImage);
+                maskedImage = this.maskImage(mask, croppedRGBImage);
+                this.stats.Image{i} = maskedImage;
                 this.stats.ObjectID(i) = i;
                 this.stats.Distance(i) = -1;
+                this.stats.Similarity(i) = -1;
+                this.stats.ColorProfile{i} = this.computeColorProfile(maskedImage);
                 [centers, radii, metrics] = this.findCoins(croppedBWImage);
                 if (isempty(centers) == 0)
                     % stats.Circularity(i) = metrics(1);
@@ -227,20 +230,29 @@ classdef ImageAnalyzer
             objectID = 0;
         end
         %% Update distances to selected object
-        function this = updateDistanceToSelectedObject(this, selectedID)
+        function this = updateDistanceAndSimilarityToSelectedObject(this, selectedID)
             if (selectedID > 0)
             rows = this.stats.ObjectID == selectedID;
             absoluteObject = this.stats(rows, :);
+            localColorProfile = cell2mat(absoluteObject.ColorProfile);
             for i=1:this.noOfObjects
                 if (this.stats.ObjectID(i) ~= absoluteObject.ObjectID(1))
                     this.stats.Distance(i) = pdist([this.stats.Centroid(i, 1), this.stats.Centroid(i, 2); absoluteObject.Centroid(1, 1), absoluteObject.Centroid(1, 2)], 'euclidean');
+                    externalColorProfile = this.stats.ColorProfile{i};
+                    RDelta = abs(double(externalColorProfile(1)) - (double(localColorProfile(1))));
+                    GDelta = abs(double(externalColorProfile(2)) - (double(localColorProfile(2))));
+                    BDelta = abs(double(externalColorProfile(3)) - (double(localColorProfile(3))));
+                    
+                    this.stats.Similarity(i) = (RDelta + GDelta + BDelta);
                 else
                     this.stats.Distance(i) = -1;
+                    this.stats.Similarity(i) = -1;
                 end
             end
             else
                 for i=1:this.noOfObjects
                     this.stats.Distance(i) = -1;
+                    this.stats.Similarity(i) = -1;
                 end
             end
         end
@@ -263,7 +275,18 @@ classdef ImageAnalyzer
                 returnImage = imwarp(firstImage, secondTransformation);
             end
         end
-        
+         %% Finds the mean of the three channels, and saves it in an array [R, G, B]
+        function colorProfile = computeColorProfile(~, maskedRGBImage)
+            RChannel = maskedRGBImage(:,:,1);
+            GChannel = maskedRGBImage(:,:,2);
+            BChannel = maskedRGBImage(:,:,3);
+            
+            RMean = mean(RChannel(:));
+            GMean = mean(GChannel(:));
+            BMean = mean(BChannel(:));
+            
+            colorProfile = [RMean, GMean, BMean];
+        end
     end
 end
 

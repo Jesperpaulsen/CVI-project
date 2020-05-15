@@ -19,7 +19,7 @@ classdef ImageAnalyzer
         function this = ImageAnalyzer(selectedImage)
             %IMAGEANALYZER Construct an instance of this class
             %   Detailed explanation goes here
-            this.defaultImages = ["MATERIAL\database\Moedas1.jpg", "MATERIAL\database\Moedas2.jpg", "MATERIAL\database\Moedas3.jpg", "MATERIAL\database\Moedas4.jpg"];
+            this.defaultImages = ["Moedas1.jpg", "Moedas2.jpg", "Moedas3.jpg", "Moedas4.jpg"];
             this.selectedImagePath = selectedImage;
             this.loadAndPreProcessImage();
             this.watershedImage();
@@ -113,9 +113,12 @@ classdef ImageAnalyzer
                 croppedBWImageUnFiltered = imcrop(this.BWImage,  table2array(this.stats(i, 'BoundingBox')));
                 this.stats.Sharpness(i) = this.computeSharpness(croppedBWImageUnFiltered);
                 mask = uint8(this.stats.Image{i});
-                this.stats.Image{i} = this.maskImage(mask, croppedRGBImage);
+                maskedImage = this.maskImage(mask, croppedRGBImage);
+                this.stats.Image{i} = maskedImage;
                 this.stats.ObjectID(i) = i;
                 this.stats.Distance(i) = -1;
+                this.stats.Similarity(i) = -1;
+                this.stats.ColorProfile(i) = this.computeColorProfile(maskedImage);
                 [centers, radii, metrics] = this.findCoins(croppedBWImage);
                 if (isempty(centers) == 0)
                     % stats.Circularity(i) = metrics(1);
@@ -227,13 +230,14 @@ classdef ImageAnalyzer
             objectID = 0;
         end
         %% Update distances to selected object
-        function this = updateDistanceToSelectedObject(this, selectedID)
+        function this = updateDistanceAndSimilarityToSelectedObject(this, selectedID)
             if (selectedID > 0)
             rows = this.stats.ObjectID == selectedID;
             absoluteObject = this.stats(rows, :);
             for i=1:this.noOfObjects
                 if (this.stats.ObjectID(i) ~= absoluteObject.ObjectID(1))
                     this.stats.Distance(i) = pdist([this.stats.Centroid(i, 1), this.stats.Centroid(i, 2); absoluteObject.Centroid(1, 1), absoluteObject.Centroid(1, 2)], 'euclidean');
+                    this.stats.Similarity(i) = 
                 else
                     this.stats.Distance(i) = -1;
                 end
@@ -241,6 +245,7 @@ classdef ImageAnalyzer
             else
                 for i=1:this.noOfObjects
                     this.stats.Distance(i) = -1;
+                    this.stats.Similarity(i) = -1;
                 end
             end
         end
@@ -249,14 +254,38 @@ classdef ImageAnalyzer
             this.stats = sortrows(this.stats, value, direction);
         end
         %% Image transformations
-        function returnImage = scaleImage(~, image, degree, scaleX, scaleY, shearX, shearY, tilt)
+        function returnImage = scaleImage(~, image, degree, scaleX, scaleY, shearX, shearY, tiltE, tiltF)
             rotateMatrix = [cos(degree) sin(degree) 0; -sin(degree) cos(degree) 0; 0 0 1];
             scaleMatrix = [scaleX 0 0; 0 scaleY 0; 0 0 1];
             shearMatrix = [1 shearY 0; shearX 1 0; 0 0 1];
             firstTansformation = affine2d(scaleMatrix * rotateMatrix * shearMatrix);
-         
+            firstImage = imwarp(image, firstTansformation);
+            if tiltE == 0 && tiltF == 0
+                returnImage = firstImage;
+            else
+                tiltMatrix = [1 0 tiltE; 0 1 tiltF; 0 0 1];
+                secondTransformation = projective2d(tiltMatrix);
+                returnImage = imwarp(firstImage, secondTransformation);
+            end
         end
-        
+         %% Finds the mean of the three channels, and saves it in an array [R, G, B]
+        function colorProfile = computeColorProfile(maskedRGBImage)
+            RChannel = maskedRGBImage(:,:,1);
+            GChannel = maskedRGBImage(:,:,2);
+            BChannel = maskedRGBImage(:,:,3);
+            
+            RMean = mean(RChannel(:));
+            GMean = mean(GChannel(:));
+            BMean = mean(BChannel(:));
+            
+            colorProfile = [RMean, GMean, BMean];
+        end
     end
+for j = 1:objCount
+
+                Thist(j, 1) = j;
+                Thist(j, 2) = deltaR + deltaG + deltaB;
+end
+            result = sortrows(Thist, 2);
 end
 
